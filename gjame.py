@@ -1,18 +1,20 @@
 import pgzrun
 import pygame
+from datetime import datetime
 
-background_decorations = pygame.transform.scale(images.background_decoratios, (1280, 720))
-background = pygame.transform.scale(images.background, (1280, 720))
+background_decorations = pygame.transform.scale(images.background_decoratios, (1920, 1080))
+background = pygame.transform.scale(images.background, (1920, 1080))
+npc_layer = pygame.transform.scale(images.npc_layer, (1920, 1080))
 
 #Ширина, Высота окна
-WIDTH = 1280
-HEIGHT = 720
+WIDTH = 1920
+HEIGHT = 1080
 
 class Villain():
 
     def __init__(self, hero, game):
         self.villainx_position = 50
-        self.villainy_position = 40
+        self.villainy_position = 240
         self.villain_walk_texture = pygame.transform.scale(images.villain_walk, (75, 120))
         self.villain_icon = pygame.transform.scale(images.villain, (75, 120))
         self.villain_chase = False
@@ -24,19 +26,18 @@ class Villain():
 
     def villain_runs_update(self): #Бег злодея
 
-        if self.villain_chase == True:
-            if self.villainx_position < self.hero.herox_position:
-                self.villainx_position += 2
-            elif self.villainx_position > self.hero.herox_position:
-                self.villainx_position -= 2
+        if self.villainx_position < self.hero.herox_position:
+            self.villainx_position += 2
+        elif self.villainx_position > self.hero.herox_position:
+            self.villainx_position -= 2
 
-            if self.villainy_position < self.hero.heroy_position:
-                self.villainy_position += 2
-            elif self.villainy_position > self.hero.heroy_position:
-                self.villainy_position -= 2
+        if self.villainy_position < self.hero.heroy_position:
+            self.villainy_position += 2
+        elif self.villainy_position > self.hero.heroy_position:
+            self.villainy_position -= 2
     
-    def start_chase(self): #Включает погоню за героем
-        self.villain_chase = True
+    #def start_chase(self): #Включает погоню за героем
+    #    self.villain_chase = True
 
     #def villain_chase_texture_manager(self): #меняет состояние анимации злодея
         #global villain_chase_texture
@@ -51,17 +52,48 @@ class Villain():
 class Hero():
 
         #Скорость и положение Главного Персонажа
-    def __init__(self):
-        self.image = pygame.transform.scale(images.jopa, (75, 110))
+    def __init__(self, game):
+
+        self.image = pygame.transform.scale(images.jopa, (60, 110))
+        self.hero_stays2 = pygame.transform.scale(images.hero_stay_02, (75, 110))
+        self.heroxpos1 = pygame.transform.scale(images.heroxpos1, (75, 110))
+        self.heroxpos1reversed = pygame.transform.scale(images.heroxpos1reversed, (75, 110))
+        self.heroxpos2 = pygame.transform.scale(images.heroxpos2, (75, 110))
+        self.heroxpos2reversed = pygame.transform.scale(images.heroxpos2reversed, (75, 110))
+        self.heroxpos3 = pygame.transform.scale(images.heroxpos3, (75, 110))
+        self.heroxpos3reversed = pygame.transform.scale(images.heroxpos3reversed, (75, 110))
+        self.heroypos1 = pygame.transform.scale(images.heroypos1, (75, 110))
+        self.heroypos1reversed = pygame.transform.scale(images.heroypos1yreversed, (75, 110))
+        self.heroypos2 = pygame.transform.scale(images.heroypos2, (75, 110))
+        self.heroypos2reversed = pygame.transform.scale(images.heroypos2yreversed, (75, 110))
+        self.heroypos3 = pygame.transform.scale(images.heroypos3, (75, 110))
+
+        self.vector = None # Это флаг для направления ходьбы героя
+        self.distancex = None # SAME
+        self.distancey = None
+        self.anim_timer = 0
+        self.anim_texture = 1
+        self.idle_start = None          # когда герой остановился
+        self.long_idle = False          # стоит ли он уже 6+ секунд
+        self.hero_is_running = False
+
         self.hero_can_move = True
+        self.hero_walk_stage = 0
         self.speedx = 0
         self.speedy = 0
-        self.herox_position = 1080
-        self.heroy_position = 640
+        self.old_herox_position = None
+        self.old_heroy_position = None
+        self.herox_position = 991
+        self.heroy_position = 963
         self.return_by_death_effect = False
+        self.game = game
 
     def hero_draw(self):
-        screen.blit(self.image, (self.herox_position, self.heroy_position))
+        if self.hero_walk_stage == 0:
+            if self.long_idle:
+                screen.blit(self.hero_stays2, (self.herox_position, self.heroy_position))
+            else:
+                screen.blit(self.image, (self.herox_position, self.heroy_position))
 
     def hero_controls(self): #Управление через клаву
 
@@ -99,12 +131,88 @@ class Hero():
         if self.heroy_position < 0:
             self.heroy_position = 0
 
+    def make_hero_old_position_update(self):
+        self.old_herox_position = self.herox_position
+        self.old_heroy_position = self.heroy_position
+
+    def hero_walk_draw(self):
+        if self.game.game_state in ("exploration", "chase"):
+            self.distancex = self.old_herox_position - self.herox_position
+            self.distancey = self.old_heroy_position - self.heroy_position
+
+            if self.distancex == 0 and self.distancey == 0:
+                self.hero_is_running = False
+                self.anim_timer = 0
+                self.anim_texture = 1
+                self.hero_walk_stage = 0
+
+                if self.idle_start is None:
+                    self.idle_start = datetime.now()
+                elif (datetime.now() - self.idle_start).total_seconds() >= 6:
+                    self.long_idle = True
+                
+            else:
+                self.hero_is_running = True
+                self.idle_start = None
+                self.long_idle = False
+                self.anim_timer += 1
+                dt = datetime.now()
+                tc = dt.microsecond%(500000/1)/(100000/1)
+
+                if tc < 1.25 and self.distancex > 0:
+                    screen.blit(self.heroxpos1, (self.herox_position, self.heroy_position))
+                    self.vector = "x"
+                    self.hero_walk_stage = 1
+
+                elif tc < 1.25 and self.distancex < 0:
+                    screen.blit(self.heroxpos1reversed, (self.herox_position, self.heroy_position))
+                    self.vector = "-x"
+                    self.hero_walk_stage = 1
+
+                elif tc > 2.5 and self.vector == "x":
+                    screen.blit(self.heroxpos2, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+                elif tc < 2.5 and self.vector == "x":
+                    screen.blit(self.heroxpos3, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+
+                elif tc > 3.75 and self.vector == "-x":
+                    screen.blit(self.heroxpos2reversed, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+                elif tc < 3.75 and self.vector == "-x":
+                    screen.blit(self.heroxpos3reversed, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+
+
+                if tc < 1.25 and self.distancey < 0:
+                    screen.blit(self.heroypos1, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+                    self.vector = "y"
+                elif tc < 1.25 and self.distancey > 0:
+                    screen.blit(self.heroypos1reversed, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1    
+                    self.vector = "-y"
+
+                elif tc < 4 and self.vector == "y":
+                    screen.blit(self.heroypos2, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+                elif tc < 4 and self.vector == "-y":
+                    screen.blit(self.heroypos2reversed, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+
+                elif self.vector == "y":
+                    screen.blit(self.heroypos3, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+                elif self.vector == "-y":
+                    screen.blit(self.heroypos1reversed, (self.herox_position, self.heroy_position))
+                    self.hero_walk_stage = 1
+
     def allow_hero_move(self): #Разрешает ходить герою
         self.hero_can_move = True
 
     def enable_return_by_death_effect(self):
         self.return_by_death_effect = True
-
+    
 class Adjusting_mode():
 
         #Проверка на самое первоее нажатие кнопки
@@ -166,16 +274,16 @@ class Dialogue():
 
     def dialogue_bar_icon_draw(self): #Рисует диалоговое окно
         if self.dialogue_bar_appears == True:
-            screen.blit(self.dialogue_bar, (150, 500))
-            screen.blit(self.villain_full_icon, (0, 400))
+            screen.blit(self.dialogue_bar, (540, 827))
+            screen.blit(self.villain_full_icon, (390, 750))
             #screen.draw.text("Vasiliy Axe Guy", (265, 520), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black")
 
     def villain_talking_draw(self):
         if self.dialogue_bar_appears == True:
             if self.current_phrase == 0:
-                screen.draw.text(self.phrases_list[self.current_phrase], (300, 600), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black", shadow=(1,1), scolor="#202020")
+                screen.draw.text(self.phrases_list[self.current_phrase], (680, 951), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black", shadow=(1,1), scolor="#202020")
             elif self.current_phrase > 0 and self.current_phrase < 6:
-                screen.draw.text(self.phrases_list[self.current_phrase], (300, 600), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black", shadow=(1,1), scolor="#202020")
+                screen.draw.text(self.phrases_list[self.current_phrase], (680, 951), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black", shadow=(1,1), scolor="#202020")
 
     def next_phrase(self):
 
@@ -205,8 +313,9 @@ class Dialogue():
 
 class Music():
 
-    def __init__(self):
+    def __init__(self, game):
         self.first_scene = False
+        self.game = game
 
     def main_music(self):
         music_game = "music_game"
@@ -218,58 +327,14 @@ class Music():
             music.play_once("rezero - todd fang hey you")
             pygame.mixer.music.set_pos(8)
             self.first_scene = False
+            clock.schedule(self.game.start_chase, 17)
 
 class Obstacle():
 
     def __init__(self):
         self.obstacles = [
-        pygame.Rect((1167, 690), (65, 31)),
-        pygame.Rect((1040, 518), (36, 35)),
-        pygame.Rect((935, 621), (143, 73)),
-        pygame.Rect((926, 360), (150, 97)),
-        pygame.Rect((1123, 365), (39, 43)),
-        pygame.Rect((1135, 204), (118, 83)),
-        pygame.Rect((906, 177), (143, 100)),
-        pygame.Rect((704, 212), (158, 114)),
-        pygame.Rect((1230, 452), (31, 34)),
-        pygame.Rect((1041, 520), (35, 33)),
-        pygame.Rect((890, 550), (21, 21)),
-        pygame.Rect((750, 346), (99, 36)),
-        pygame.Rect((832, 362), (64, 60)),
-        pygame.Rect((575, 621), (349, 96)),
-        pygame.Rect((1124, 67), (29, 32)),
-        pygame.Rect((321, 622), (237, 98)),
-        pygame.Rect((404, 405), (86, 56)),
-        pygame.Rect((240, 550), (81, 49)),
-        pygame.Rect((156, 610), (138, 106)),
-        pygame.Rect((49, 585), (35, 33)),
-        pygame.Rect((192, 325), (78, 65)),
-        pygame.Rect((9, 429), (61, 59)),
-        pygame.Rect((125, 409), (62, 44)),
-        pygame.Rect((32, 229), (124, 121)),
-        pygame.Rect((198, 202), (55, 55)),
-        pygame.Rect((353, 210), (57, 51)),
-        pygame.Rect((17, 178), (49, 50)),
-        pygame.Rect((249, 7), (161, 97)),
-        pygame.Rect((65, 35), (61, 61)),
-        pygame.Rect((568, 582), (23, 23)),
-        pygame.Rect((667, 153), (18, 25)),
-        pygame.Rect((408, 158), (24, 27)),
-        pygame.Rect((447, 1), (96, 66)),
-        pygame.Rect((542, 32), (42, 35)),
-        pygame.Rect((479, 164), (128, 66)),
-        pygame.Rect((447, 230), (193, 99)),
-        pygame.Rect((479, 295), (193, 34)),
-        pygame.Rect((512, 328), (189, 65)),
-        pygame.Rect((544, 394), (223, 33)),
-        pygame.Rect((582, 425), (186, 39)),
-        pygame.Rect((700, 357), (36, 38)),
-        pygame.Rect((448, 64), (194, 27)),
-        pygame.Rect((447, 152), (192, 40)),
-        pygame.Rect((573, 447), (302, 38)),
-        pygame.Rect((572, 559), (332, 25))
+        None
         ]
-
 
     def show_obstacles(self):
         for obs in self.obstacles:
@@ -279,16 +344,20 @@ class Game():
 
     def __init__(self):
         self.obstacle = Obstacle()
-        self.hero = Hero()
+        self.hero = Hero(self)
         self.villain = Villain(self.hero, self)
         self.dialogue = Dialogue()
-        self.music = Music()
+        self.music = Music(self)
         self.adjust = Adjusting_mode()
         self.music.main_music()
         self.first_encounter = False
 
-    #Хитбоксы героя и злодея
-        self.game_state = None
+        self.fullscreen_set = False
+        self.fullscreen_was_settled_first_time = False
+
+        self.spectator_mode = False
+        self.game_states = ("exploratioin", "dialogue", "chase")
+        self.game_state = "exploration"
         self.collision_villain = None #сюда ниже присваиваются хитбоксы
         self.collision_hero = None
 
@@ -300,10 +369,10 @@ class Game():
     def hero_return_by_death(self): #Повторные смерти от злодея
 
         if self.collision_hero.collidelist([self.collision_villain]) != -1 and self.hero.return_by_death_effect == True: #ПОТОМ СДЕЛАТЬ УСЛОВНИИЕ В GAME НЕ ЗАБЫТЬ
-            self.hero.herox_position = 1080
-            self.hero.heroy_position = 640
+            self.hero.herox_position = 991
+            self.hero.heroy_position = 963
             self.villain.villainx_position = 50
-            self.villain.villainy_position = 40
+            self.villain.villainy_position = 240
             music.play_once("rezero return by death sound effect")
             pygame.mixer.music.set_pos(1)
 
@@ -314,64 +383,128 @@ class Game():
 
         if self.first_encounter == False:
             if self.collision_hero.collidelist([self.collision_villain]) != -1: #Буквально, если игрок сталкивается со злодеем, то...
+                self.start_dialogue()
                 self.first_encounter = True
                 self.dialogue.dialogue_bar_appears = True
                 self.music.first_scene = True
                 self.hero.hero_can_move = False
                 clock.schedule(self.dialogue.next_phrase, 0.7)
-                clock.schedule(self.hero.enable_return_by_death_effect,17)
-                clock.schedule(self.dialogue.dialogue_bar_appears_off, 17)
-                clock.schedule(self.villain.start_chase, 17)
-                clock.schedule(self.hero.allow_hero_move, 17)
+
+    def start_exploration(self):
+        self.game_state = "exploration"
+
+    def start_dialogue(self):
+        self.game_state = "dialogue"
+        self.hero.hero_walk_stage = 0
+        self.hero.distancex = 0
+        self.hero.distancey = 0
+        self.hero.idle_start = None
+        self.hero.long_idle = False
+
+    def start_chase(self):
+        self.game_state = "chase"
+
+    def set_screen_mode(self):
+        if self.fullscreen_was_settled_first_time == False:
+            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+            self.fullscreen_was_settled_first_time = True
+        if keyboard.f11 == True and self.fullscreen_set == False:
+            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+            self.fullscreen_set = True
+        elif keyboard.f11 == True and self.fullscreen_set == True:
+            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT))
+            self.fullscreen_set = False
 
     def update(self):
         
         self.adjust.adjusting_mode()
 
-        prev_hero_x = self.hero.herox_position
-        prev_hero_y = self.hero.heroy_position
+        if self.game_state == "exploration":
+            prev_hero_x = self.hero.herox_position
+            prev_hero_y = self.hero.heroy_position
 
-        self.hero.hero_controls()
+            self.hero.make_hero_old_position_update()
 
-        self.collision_villain = self.villain.villain_icon.get_rect(topleft = (self.villain.villainx_position, self.villain.villainy_position))
-        self.collision_hero = self.hero.image.get_rect(topleft = (self.hero.herox_position, self.hero.heroy_position))
-        self.collision_hero.inflate_ip(-37, -100)
-        self.collision_hero.y += 55
+            self.hero.hero_controls()
 
-        if self.collision_hero.collidelist(self.obstacle.obstacles) != -1:
-            self.hero.herox_position = prev_hero_x 
-            self.hero.heroy_position = prev_hero_y 
+            self.collision_hero = self.hero.image.get_rect(topleft = (self.hero.herox_position, self.hero.heroy_position))
+            self.collision_hero.inflate_ip(-60, -150)
+            self.collision_hero.y += 40
 
-        self.villain.villain_runs_update()
+            #if self.collision_hero.collidelist(self.obstacle.obstacles) != -1: #ТУТ ГЕРОЙ СПОТЫКАЕТСЯ ОБ obstacles
+            #    self.hero.herox_position = prev_hero_x 
+            #    self.hero.heroy_position = prev_hero_y 
 
-        self.first_meet_villain()
-        self.music.villain_first_reply()
-        self.hero_return_by_death()
+        self.first_meet_villain() # ТУТ Я ВЫНЕС ПРОВЕРКУ НА СТОЛКНОВЕНИЕ, КОТОРОЕ ДОЛЖНО ЗАПУСКАТЬ ДИАЛОГ, ДАЛЬШЕ НАДО СДЕЛАТЬ ПЕРЕКЛЮЧЕНИЕ С ДИАЛОГА НА CHASE
+
+        if self.game_state == "dialogue":
+            self.music.villain_first_reply()
+
+        if self.game_state == "chase":
+
+            prev_hero_x = self.hero.herox_position
+            prev_hero_y = self.hero.heroy_position
+
+            self.hero.make_hero_old_position_update()
+
+            self.hero.hero_controls()
+
+            #self.collision_hero = self.hero.image.get_rect(topleft = (self.hero.herox_position, self.hero.heroy_position)) #ТУТ ГЕРОЙ СПОТЫКАЕТСЯ ОБ obstacles
+            #self.collision_hero.inflate_ip(-60, -150)
+            #self.collision_hero.y += 40
+
+            #if self.collision_hero.collidelist(self.obstacle.obstacles) != -1:
+            #    self.hero.herox_position = prev_hero_x 
+            #    self.hero.heroy_position = prev_hero_y 
+
+            #prev_villain_x = self.villain.villainx_position
+            #prev_villain_y = self.villain.villainy_position
+
+            #self.collision_villain = self.villain.villain_icon.get_rect(topleft = (self.villain.villainx_position, self.villain.villainy_position))
+            #self.collision_hero.inflate_ip(-60, -150)
+            #self.collision_hero.y += 40
+
+            self.villain.villain_runs_update()
+
+            #if self.collision_villain.collidelist(self.obstacle.obstacles) != -1:
+           #     self.villain.villainx_position = prev_villain_x
+            #    self.villain.villainy_position = prev_villain_y
+
+            self.hero_return_by_death()
+            self.hero.enable_return_by_death_effect()
+            self.dialogue.dialogue_bar_appears_off()
+            self.hero.allow_hero_move()
 
     def draw(self):
-        
+
         screen.clear()
         screen.blit(background, (0, 0))
 
+        self.set_screen_mode()
+
         self.hero.hero_draw()
-
-        screen.blit(background_decorations, (0, 0))
-
-        if self.collision_hero:
-            self.collision_hero = self.hero.image.get_rect(topleft = (self.hero.herox_position, self.hero.heroy_position))
-            self.collision_hero.inflate_ip(-37, -100)
-            self.collision_hero.y += 55
-            screen.draw.rect(self.collision_hero, (200, 0, 0))
-
-        self.adjust.adjusting_mode()
+        self.hero.hero_walk_draw()
+        if self.spectator_mode == True:
+            self.obstacle.show_obstacles()
+            
+            if self.collision_hero:
+                self.collision_hero = self.hero.image.get_rect(topleft = (self.hero.herox_position, self.hero.heroy_position))
+                self.collision_hero.inflate_ip(-60, -100)
+                self.collision_hero.y += 55
+                screen.draw.rect(self.collision_hero, (200, 0, 0))
 
         self.villain.villain_stays_draw()
+
+        screen.blit(background_decorations, (0, 0))
+        screen.blit(npc_layer, (0, 0))
+
+        self.adjust.adjusting_mode()
 
         self.dialogue.dialogue_bar_icon_draw()
         self.dialogue.villain_talking_draw()
 
-        self.obstacle.show_obstacles()
-
+        screen.draw.text("P - включить режим отладки", (5, 5), color=(200, 0, 0))
+        screen.draw.text("Esc - Насувать васлию пенисов в рот", (5, 20), color=(200, 0, 0))
 game = Game()
 
 def update():
@@ -379,5 +512,9 @@ def update():
 
 def draw():
     game.draw()
+
+def on_key_down(key):
+    if key == keys.P:
+        game.spectator_mode = not game.spectator_mode
 
 pgzrun.go()
