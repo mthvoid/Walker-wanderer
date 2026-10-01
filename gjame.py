@@ -1,53 +1,177 @@
 import pgzrun
 import pygame
+import av
+import sys
 from datetime import datetime
 
 background_decorations = pygame.transform.scale(images.background_decoratios, (1920, 1080))
 background = pygame.transform.scale(images.background, (1920, 1080))
+map_shadows = pygame.transform.scale(images.map_shadows, (1920, 1080))
 npc_layer = pygame.transform.scale(images.npc_layer, (1920, 1080))
 
 #Ширина, Высота окна
 WIDTH = 1920
 HEIGHT = 1080
 
+HERO_START = (991, 963)
+VILLAIN_START = (50,240)
+
+HERO_SPEED = 5
+VILLAIN_SPEED = 2
+
+VILLAIN_ROUTE_RIGHT = 1370
+VILLAIN_ROUTE_DOWN = 750
+VILLAIN_ROUTE_LEFT = 1000
+VILLAIN_ROUTE_UP = 200
+
+PHRASES_LIST = [
+                    ("Hey",(2.5)), 
+                    ("Hey, you",(1.5)), 
+                    ("What are you doing in a place like this",(3.2)), 
+                    ("I never forget a face when I see it",(2.3)), 
+                    ("You smell simillar",(1.8)), 
+                    ("To a terryifying guy I know",(3.3))
+]
+
 class Villain():
 
     def __init__(self, hero, game):
-        self.villainx_position = 50
-        self.villainy_position = 240
-        self.villain_walk_texture = pygame.transform.scale(images.villain_walk, (75, 120))
+        self.villainx_position, self.villainy_position = VILLAIN_START
         self.villain_icon = pygame.transform.scale(images.villain, (75, 120))
+        self.villainxpos1 = pygame.transform.scale(images.villainxpos1, (75, 110))
+        self.villainxpos1reversed = pygame.transform.scale(images.villainxpos1reversed, (75, 110))
+        self.villainxpos2 = pygame.transform.scale(images.villainxpos2, (75, 110))
+        self.villainxpos2reversed = pygame.transform.scale(images.villainxpos2reversed, (75, 110))
+        self.villainxpos3 = pygame.transform.scale(images.villainxpos3, (75, 110))
+        self.villainxpos3reversed = pygame.transform.scale(images.villainxpos3reversed, (75, 110))
+        self.villainypos1 = pygame.transform.scale(images.villainypos1, (75, 110))
+        self.villainypos1reversed = pygame.transform.scale(images.villainypos1reversed, (75, 110))
+        self.villainypos2 = pygame.transform.scale(images.villainypos2, (75, 110))
+        self.villainypos2reversed = pygame.transform.scale(images.villainypos2reversed, (75, 110))
+        self.villainypos3 = pygame.transform.scale(images.villainypos3, (75, 110))
         self.villain_chase = False
+        self.villain_phase = None
         self.hero = hero
         self.game = game
 
+        self.speed = VILLAIN_SPEED
+        self.vector = None # Это флаг для направления ходьбы героя
+        self.distancex = None # SAME
+        self.distancey = None
+        self.anim_timer = 0
+        self.anim_texture = 1
+        self.villain_is_running = False
+
+        self.villain_walk_stage = 0
+        self.old_villainx_position = None
+        self.old_villainy_position = None
+
     def villain_stays_draw(self): #отрисовка злодея
+        if self.villain_walk_stage == 0:
             screen.blit(self.villain_icon, (self.villainx_position, self.villainy_position))
 
     def villain_runs_update(self): #Бег злодея
+        if self.villain_chase == "Right": 
+            self.villainx_position += self.speed
+            if self.villainx_position >= VILLAIN_ROUTE_RIGHT:
+                self.villainx_position = VILLAIN_ROUTE_RIGHT
+                self.villain_chase = "Down"
+        if self.villain_chase == "Down":
+            self.villainy_position += self.speed
+            if self.villainy_position >= VILLAIN_ROUTE_DOWN:
+                self.villainy_position = VILLAIN_ROUTE_DOWN
+                self.villain_chase = "Left"
+        if self.villain_chase == "Left":
+            self.villainx_position -= self.speed
+            if self.villainx_position <= VILLAIN_ROUTE_LEFT:
+                self.villainx_position = VILLAIN_ROUTE_LEFT
+                self.villain_chase = "Up"
+        if self.villain_chase == "Up":
+            self.villainy_position -= self.speed
+            if self.villainy_position <= VILLAIN_ROUTE_UP:
+                self.villainy_position = VILLAIN_ROUTE_UP
+                self.villain_chase = "Right"
 
-        if self.villainx_position < self.hero.herox_position:
-            self.villainx_position += 2
-        elif self.villainx_position > self.hero.herox_position:
-            self.villainx_position -= 2
+    def make_villain_old_position_update(self):
+        self.old_villainx_position = self.villainx_position
+        self.old_villainy_position = self.villainy_position
 
-        if self.villainy_position < self.hero.heroy_position:
-            self.villainy_position += 2
-        elif self.villainy_position > self.hero.heroy_position:
-            self.villainy_position -= 2
-    
-    #def start_chase(self): #Включает погоню за героем
-    #    self.villain_chase = True
+    def villain_walk_draw(self):
+        if self.game.game_state == "chase":
+            self.distancex = self.old_villainx_position - self.villainx_position
+            self.distancey = self.old_villainy_position - self.villainy_position
 
-    #def villain_chase_texture_manager(self): #меняет состояние анимации злодея
-        #global villain_chase_texture
-        #global villain_starts_chase_texture
-        #villain_starts_chase_texture = True
-        #villain_chase_texture = True
+            if self.distancex == 0 and self.distancey == 0:
+                self.villain_is_running = False
+                self.anim_timer = 0
+                self.anim_texture = 1
+                self.villain_walk_stage = 0
 
-    #def villain_chase_texture_manager_while_running(self): #меняет состояние анимации обратно
-        #global villain_chase_texture
-        #villain_chase_texture = False
+                if self.idle_start is None:
+                    self.idle_start = datetime.now()
+                elif (datetime.now() - self.idle_start).total_seconds() >= 6:
+                    self.long_idle = True
+                
+            else:
+                self.villain_is_running = True
+                self.idle_start = None
+                self.long_idle = False
+                self.anim_timer += 1
+                dt = datetime.now()
+                tc = dt.microsecond%(500000/1)/(100000/1)
+
+                if tc < 1.25 and self.distancex > 0:
+                    screen.blit(self.villainxpos1, (self.villainx_position, self.villainy_position))
+                    self.vector = "x"
+                    self.villain_walk_stage = 1
+
+                elif tc < 1.25 and self.distancex < 0:
+                    screen.blit(self.villainxpos1reversed, (self.villainx_position, self.villainy_position))
+                    self.vector = "-x"
+                    self.villain_walk_stage = 1
+
+                elif tc > 2.5 and self.vector == "x":
+                    screen.blit(self.villainxpos2, (self.villainx_position, self.villainy_position))
+                    self.villain_walk_stage = 1
+                elif tc < 2.5 and self.vector == "x":
+                    screen.blit(self.villainxpos3, (self.villainx_position, self.villainy_position))
+                    self.villain_walk_stage = 1
+
+                elif tc > 3.75 and self.vector == "-x":
+                    screen.blit(self.villainxpos2reversed, (self.villainx_position, self.villainy_position))
+                    self.villain_walk_stage = 1
+                elif tc < 3.75 and self.vector == "-x":
+                    screen.blit(self.villainxpos3reversed, (self.villainx_position, self.villainy_position))
+                    self.villain_walk_stage = 1
+
+
+                if tc < 1.25 and self.distancey < 0:
+                    screen.blit(self.villainypos1, (self.villainx_position, self.villainy_position))
+                    self.hero_walk_stage = 1
+                    self.vector = "y"
+                elif tc < 1.25 and self.distancey > 0:
+                    screen.blit(self.villainypos1reversed, (self.villainx_position, self.villainy_position))
+                    self.hero_walk_stage = 1    
+                    self.vector = "-y"
+
+                elif tc < 4 and self.vector == "y":
+                    screen.blit(self.villainypos2, (self.villainx_position, self.villainy_position))
+                    self.hero_walk_stage = 1
+                elif tc < 4 and self.vector == "-y":
+                    screen.blit(self.villainypos2reversed, (self.villainx_position, self.villainy_position))
+                    self.hero_walk_stage = 1
+
+                elif self.vector == "y":
+                    screen.blit(self.villainypos3, (self.villainx_position, self.villainy_position))
+                    self.hero_walk_stage = 1
+                elif self.vector == "-y":
+                    screen.blit(self.villainypos1reversed, (self.villainx_position, self.villainy_position))
+                    self.hero_walk_stage = 1
+
+    def villain_shadow_draw(self):
+        shadow = pygame.Surface((70, 70), pygame.SRCALPHA)
+        pygame.draw.circle(shadow, (0, 0, 0, 60), (50, 50), 20)
+        screen.surface.blit(shadow, (self.villainx_position - 15, self.villainy_position + 50))
 
 class Hero():
 
@@ -79,12 +203,12 @@ class Hero():
 
         self.hero_can_move = True
         self.hero_walk_stage = 0
+        self.speed = HERO_SPEED
         self.speedx = 0
         self.speedy = 0
         self.old_herox_position = None
         self.old_heroy_position = None
-        self.herox_position = 991
-        self.heroy_position = 963
+        self.herox_position, self.heroy_position = HERO_START
         self.return_by_death_effect = False
         self.game = game
 
@@ -102,16 +226,16 @@ class Hero():
 
         if self.hero_can_move == True:
             if keyboard.a == True:
-                self.speedx = -5
+                self.speedx = -self.speed
             elif keyboard.d == True:
-                self.speedx = 5
+                self.speedx = self.speed
             else:
                 self.speedx = 0
 
             if keyboard.w == True:
-                self.speedy = -5
+                self.speedy = -self.speed
             elif keyboard.s == True:
-                self.speedy = 5
+                self.speedy = self.speed
             else:
                 self.speedy = 0
 
@@ -152,60 +276,140 @@ class Hero():
                     self.long_idle = True
                 
             else:
+
+                #навайбкожено, но с моей основы
                 self.hero_is_running = True
                 self.idle_start = None
                 self.long_idle = False
+
                 self.anim_timer += 1
-                dt = datetime.now()
-                tc = dt.microsecond%(500000/1)/(100000/1)
 
-                if tc < 1.25 and self.distancex > 0:
-                    screen.blit(self.heroxpos1, (self.herox_position, self.heroy_position))
-                    self.vector = "x"
-                    self.hero_walk_stage = 1
+                # ──────────────── X ────────────────
 
-                elif tc < 1.25 and self.distancex < 0:
-                    screen.blit(self.heroxpos1reversed, (self.herox_position, self.heroy_position))
-                    self.vector = "-x"
-                    self.hero_walk_stage = 1
+                if self.distancex > 0:
 
-                elif tc > 2.5 and self.vector == "x":
-                    screen.blit(self.heroxpos2, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
-                elif tc < 2.5 and self.vector == "x":
-                    screen.blit(self.heroxpos3, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
+                    if self.vector != "x":
+                        self.vector = "x"
+                        self.anim_timer = 0
 
-                elif tc > 3.75 and self.vector == "-x":
-                    screen.blit(self.heroxpos2reversed, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
-                elif tc < 3.75 and self.vector == "-x":
-                    screen.blit(self.heroxpos3reversed, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
+                    if self.anim_timer < 3:
+                        screen.blit(
+                            self.heroxpos1,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 1
+
+                    elif self.anim_timer < 6:
+                        screen.blit(
+                            self.heroxpos2,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 2
+
+                    else:
+                        screen.blit(
+                            self.heroxpos3,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 3
 
 
-                if tc < 1.25 and self.distancey < 0:
-                    screen.blit(self.heroypos1, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
-                    self.vector = "y"
-                elif tc < 1.25 and self.distancey > 0:
-                    screen.blit(self.heroypos1reversed, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1    
-                    self.vector = "-y"
+                elif self.distancex < 0:
 
-                elif tc < 4 and self.vector == "y":
-                    screen.blit(self.heroypos2, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
-                elif tc < 4 and self.vector == "-y":
-                    screen.blit(self.heroypos2reversed, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
+                    if self.vector != "-x":
+                        self.vector = "-x"
+                        self.anim_timer = 0
 
-                elif self.vector == "y":
-                    screen.blit(self.heroypos3, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
-                elif self.vector == "-y":
-                    screen.blit(self.heroypos1reversed, (self.herox_position, self.heroy_position))
-                    self.hero_walk_stage = 1
+                    if self.anim_timer < 3:
+                        screen.blit(
+                            self.heroxpos1reversed,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 1
+
+                    elif self.anim_timer < 6:
+                        screen.blit(
+                            self.heroxpos2reversed,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 2
+
+                    else:
+                        screen.blit(
+                            self.heroxpos3reversed,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 3
+
+
+                # ──────────────── Y ────────────────
+
+                elif self.distancey < 0:
+
+                    if self.vector != "y":
+                        self.vector = "y"
+                        self.anim_timer = 0
+
+                    if self.anim_timer < 3:
+                        screen.blit(
+                            self.heroypos1,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 1
+
+                    elif self.anim_timer < 6:
+                        screen.blit(
+                            self.heroypos2,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 2
+
+                    else:
+                        screen.blit(
+                            self.heroypos3,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 3
+
+
+                elif self.distancey > 0:
+
+                    if self.vector != "-y":
+                        self.vector = "-y"
+                        self.anim_timer = 0
+
+                    if self.anim_timer < 3:
+                        screen.blit(
+                            self.heroypos1reversed,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 1
+
+                    elif self.anim_timer < 6:
+                        screen.blit(
+                            self.heroypos2reversed,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 2
+
+                    else:
+                        screen.blit(
+                            self.heroypos1reversed,
+                            (self.herox_position, self.heroy_position)
+                        )
+                        self.hero_walk_stage = 3
+
+
+                if self.anim_timer >= 8:
+                    self.anim_timer = 0
+
+    def hero_shadow_draw(self):
+        shadow = pygame.Surface((70, 70), pygame.SRCALPHA)
+        pygame.draw.circle(shadow, (0, 0, 0, 60), (50, 50), 20)
+        screen.surface.blit(
+            shadow,
+            (self.herox_position - 15, self.heroy_position + 50)
+        )
 
     def allow_hero_move(self): #Разрешает ходить герою
         self.hero_can_move = True
@@ -264,8 +468,10 @@ class Dialogue():
         self.phrase_appeared = False
         self.phrases_list = ("Hey", "Hey, you", "What are you doing in a place like this", "I never forget a face when I see it", "You smell simillar", "To a terryifying guy I know")
         self.current_phrase = 0
+        self.time = 0
         self.text_first_state = False
         self.dialogue_bar_appears = None
+        self.first_phrase_ready = False
         self.dialogue_bar = pygame.transform.scale(images.dialogue_bar, (1000, 255))
         self.villain_full_icon = pygame.transform.scale(images.villain_full_icon, (385, 394))
 
@@ -276,58 +482,60 @@ class Dialogue():
         if self.dialogue_bar_appears == True:
             screen.blit(self.dialogue_bar, (540, 827))
             screen.blit(self.villain_full_icon, (390, 750))
-            #screen.draw.text("Vasiliy Axe Guy", (265, 520), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black")
+            screen.draw.text("VASILIY AXE GUY", (688, 837), color = (211, 100, 100), fontsize = 45, owidth=2, ocolor="black", shadow=(1,1), scolor="#202020")
+
+    def show_first_phrase(self):
+        self.first_phrase_ready = True
 
     def villain_talking_draw(self):
-        if self.dialogue_bar_appears == True:
-            if self.current_phrase == 0:
-                screen.draw.text(self.phrases_list[self.current_phrase], (680, 951), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black", shadow=(1,1), scolor="#202020")
-            elif self.current_phrase > 0 and self.current_phrase < 6:
-                screen.draw.text(self.phrases_list[self.current_phrase], (680, 951), color = (211, 100, 100), fontsize = 45, owidth=1, ocolor="black", shadow=(1,1), scolor="#202020")
+        if self.dialogue_bar_appears == True and self.first_phrase_ready:
+            text, duration = PHRASES_LIST[self.current_phrase]
+            screen.draw.text(text, (680, 920), color = (211, 100, 100), fontsize = 45, owidth=2, ocolor="black", shadow=(1,1), scolor="#202020")
 
-    def next_phrase(self):
-
-        if self.current_phrase == 0 and self.text_first_state == False:
-            self.text_first_state = True
-            clock.schedule(self.next_phrase, 1.5)
-
-        elif self.current_phrase == 0 and self.text_first_state == True:
-            self.current_phrase += 1
-            clock.schedule(self.next_phrase, 1.4)
-
-        elif self.current_phrase == 1:
-            self.current_phrase += 1
-            clock.schedule(self.next_phrase, 3.6)
-
-        elif self.current_phrase == 2:
-            self.current_phrase += 1
-            clock.schedule(self.next_phrase, 2.5)
-
-        elif self.current_phrase == 3:
-            self.current_phrase += 1
-            clock.schedule(self.next_phrase, 1.5)
-
-        elif self.current_phrase == 4:
-            self.current_phrase += 1
-            clock.schedule(self.next_phrase, 2.3)
+    def next_phrase(self, dt):
+        if self.current_phrase < len(PHRASES_LIST) - 1:
+            self.time += dt
+            text, duration = PHRASES_LIST[self.current_phrase]
+            if self.time >= duration:
+                self.current_phrase += 1
+                self.time = 0
+                self.text_first_state = True
+                self.next_phrase
 
 class Music():
 
     def __init__(self, game):
-        self.first_scene = False
+        self.first_scene = True
+        self.before_dialogue = True
+        self.music_started = False
         self.game = game
 
     def main_music(self):
-        music_game = "music_game"
-        music.set_volume(0.3)
-        music.play(music_game)
+        if self.before_dialogue:
+            pygame.mixer.music.load("music/music_game.mp3")
+            pygame.mixer.music.set_volume(0.3)
+            pygame.mixer.music.play()
+        elif self.game.game_state == "chase" and self.music_started == False:
+            pygame.mixer.music.load("music/shapeshift.mp3")
+            print("AFTER LOAD:", pygame.mixer.music.get_busy())
+            pygame.mixer.music.set_volume(0.3)
+            pygame.mixer.music.play()
+            print("AFTER PLAY:", pygame.mixer.music.get_busy())
+            self.music_started = True
 
     def villain_first_reply(self):
         if self.first_scene == True:
-            music.play_once("rezero - todd fang hey you")
-            pygame.mixer.music.set_pos(8)
+            
+            sound = pygame.mixer.Sound("music/rezero - todd fang hey you.mp3")
+            sound.play()
+
             self.first_scene = False
-            clock.schedule(self.game.start_chase, 17)
+
+    def hero_dies_sound(self):
+        sound = pygame.mixer.Sound("music/rezero return by death sound effect.wav")
+        sound.play()
+        stabbing_sound = pygame.mixer.Sound("music/stabbing_sound.wav")
+        stabbing_sound.play()
 
 class Obstacle():
 
@@ -338,7 +546,175 @@ class Obstacle():
 
     def show_obstacles(self):
         for obs in self.obstacles:
-            screen.draw.rect(obs, (200, 0, 0))
+            try:
+                screen.draw.rect(obs, (200, 0, 0))
+            except:
+                screen.draw.text("Препятствий нет!", (900, 540), color=(200, 0, 0), fontsize = 30, owidth=4, ocolor="black", shadow=(1,2), scolor="#202020")
+                
+
+class Pause():
+
+    def __init__(self, game):
+        self.pause_image = pygame.transform.scale(images.pause_image, (1920, 1080))
+        self.rectangle_19 = pygame.transform.scale(images.rectangle_19, (694, 132))
+        self.polygon1 = pygame.transform.scale(images.polygon31, (104, 100))
+        self.polygon2 = pygame.transform.scale(images.polygon32, (104, 100))
+        self.pause_icon = pygame.transform.scale(images.pause_icon, (450, 300))
+        self.last_game_state = None
+        self.game = game
+
+        self.mouse_x = 0
+        self.mouse_y = 0
+
+        self.alpha = 0
+        self.opening = False
+
+    def update(self):
+        self.mouse_x, self.mouse_y = pygame.mouse.get_pos()
+
+    def pause_toggle(self):
+        if self.game.game_state != "Pause":
+            self.last_game_state = self.game.game_state
+            self.game.game_state = "Pause"
+            pygame.mixer.pause()
+
+        else: 
+            self.game.game_state = "Pause"
+            pygame.mixer.unpause()
+            self.game.game_state = self.last_game_state
+
+    def opening_menu(self):
+        self.alpha = 0
+        self.opening = True
+
+    def alpha_update(self):
+        if self.opening:
+            self.alpha += 5
+
+            if self.alpha == 250:
+                self.opening = False
+
+    def pause_draw(self):
+        self.pause_image.set_alpha(self.alpha)
+        self.pause_icon.set_alpha(self.alpha)
+        screen.blit(self.pause_image, (0, 0))
+        screen.blit(self.pause_icon, (250, 125))
+
+        if 132 <= self.mouse_x <= 826 and 353 <= self.mouse_y <= 485:
+            screen.blit(self.rectangle_19, (132, 353))
+
+        elif 132 <= self.mouse_x <= 826 and 453 <= self.mouse_y <= 585:
+            screen.blit(self.rectangle_19, (132, 453))
+
+        elif 132 <= self.mouse_x <= 826 and 453 <= self.mouse_y <= 677:
+            screen.blit(self.rectangle_19, (132, 550))
+
+        elif 132 <= self.mouse_x <= 826 and 453 <= self.mouse_y <= 777:
+            screen.blit(self.rectangle_19, (132, 650))
+
+        elif 132 <= self.mouse_x <= 826 and 453 <= self.mouse_y <= 877:
+            screen.blit(self.rectangle_19, (132, 745))
+
+        elif 132 <= self.mouse_x <= 826 and 453 <= self.mouse_y <= 977:
+            screen.blit(self.rectangle_19, (132, 845))
+
+        elif 1000 <= self.mouse_x <= 1130 and 973 <= self.mouse_y <= 1105:
+            screen.blit(self.polygon2, (1000, 973))
+
+        elif 1143 <= self.mouse_x <= 1380 and 973 <= self.mouse_y <= 1105:
+            screen.blit(self.polygon1, (1143, 973))
+
+        font = pygame.font.Font(None, 45)
+        buttons = [("ПРОДОЛЖИТЬ",479,419), ("НАСТРОЙКИ (in progress)",479,519), ("УПРАВЛЕНИЕ (in progress)",479,616), ("ПОСМОТРЕТЬ ЭДИТ",479,716), ("ГЛАВНОЕ МЕНЮ (in progress)",479,811), ("ВЫЙТИ",479,911)]
+
+        for text, x, y in buttons:
+            text_surface = font.render(text, True, (210, 180, 100))
+            text_surface.set_alpha(self.alpha)
+            text_rect = text_surface.get_rect(center=(x, y))
+
+            screen.blit(text_surface, text_rect)
+
+class Video(): # СДЕЛАЛ НЕ Я ЭТО ВАЙБ КОД
+
+    def __init__(self):
+        self.container = None
+        self.frames = None
+        self.frame = None
+
+        self.playing = False
+
+        self.fps = 30
+        self.frame_duration = 1000 / 30
+        self.next_frame_time = 0
+
+
+    def play(self, filename):
+        self.container = av.open(filename)
+
+        self.fps = float(
+            self.container.streams.video[0].average_rate
+        )
+
+        self.frame_duration = 1000 / self.fps
+
+        self.frames = self.container.decode(video=0)
+
+        self.playing = True
+
+        self.next_frame_time = pygame.time.get_ticks()
+
+
+    def update(self):
+
+        if not self.playing:
+            return
+
+        current_time = pygame.time.get_ticks()
+
+        if current_time < self.next_frame_time:
+            return
+
+        self.next_frame_time += self.frame_duration
+
+        try:
+            frame = next(self.frames)
+
+            image = frame.to_image()
+
+            self.frame = pygame.image.fromstring(
+                image.tobytes(),
+                image.size,
+                image.mode
+            )
+
+        except StopIteration:
+            self.stop()
+
+
+    def draw(self):
+
+        if self.frame:
+
+            rect = self.frame.get_rect(
+                center=(WIDTH // 2, HEIGHT // 2)
+            )
+
+            screen.surface.blit(
+                self.frame,
+                rect
+            )
+
+
+    def stop(self):
+
+        self.playing = False
+
+        if self.container:
+            self.container.close()
+
+        self.container = None
+        self.frames = None
+        self.frame = None
 
 class Game():
 
@@ -349,17 +725,22 @@ class Game():
         self.dialogue = Dialogue()
         self.music = Music(self)
         self.adjust = Adjusting_mode()
-        self.music.main_music()
+        self.pause = Pause(self)
+        self.video = Video()
+
         self.first_encounter = False
+        self.dialogue_started = False
 
         self.fullscreen_set = False
         self.fullscreen_was_settled_first_time = False
 
         self.spectator_mode = False
-        self.game_states = ("exploratioin", "dialogue", "chase")
+        self.game_states = ("exploratioin", "dialogue", "chase", "Pause")
         self.game_state = "exploration"
         self.collision_villain = None #сюда ниже присваиваются хитбоксы
         self.collision_hero = None
+
+        self.music.main_music()
 
         clock.schedule(self.set_window_title, 0.0)
 
@@ -373,8 +754,8 @@ class Game():
             self.hero.heroy_position = 963
             self.villain.villainx_position = 50
             self.villain.villainy_position = 240
-            music.play_once("rezero return by death sound effect")
-            pygame.mixer.music.set_pos(1)
+            self.villain.villain_chase = "Right"
+            self.music.hero_dies_sound()
 
     def first_meet_villain(self): #Первая встреча со злодеем, включение погони через 17 сек
 
@@ -384,11 +765,13 @@ class Game():
         if self.first_encounter == False:
             if self.collision_hero.collidelist([self.collision_villain]) != -1: #Буквально, если игрок сталкивается со злодеем, то...
                 self.start_dialogue()
+                self.villain.villain_chase = "Right"
                 self.first_encounter = True
-                self.dialogue.dialogue_bar_appears = True
+
                 self.music.first_scene = True
-                self.hero.hero_can_move = False
-                clock.schedule(self.dialogue.next_phrase, 0.7)
+                self.music.before_dialogue = False
+                pygame.mixer.music.stop()
+
 
     def start_exploration(self):
         self.game_state = "exploration"
@@ -403,25 +786,49 @@ class Game():
 
     def start_chase(self):
         self.game_state = "chase"
+        self.music.main_music()
 
     def set_screen_mode(self):
         if self.fullscreen_was_settled_first_time == False:
             screen.surface = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
             self.fullscreen_was_settled_first_time = True
-        if keyboard.f11 == True and self.fullscreen_set == False:
-            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
-            self.fullscreen_set = True
-        elif keyboard.f11 == True and self.fullscreen_set == True:
-            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT))
-            self.fullscreen_set = False
 
-    def update(self):
+    def draw_debug_menu(self):
+        #отладка
+        x = 5
+        y = 620
+        debug_list = [
+            (f"state={self.game_state}"),
+            (f"last_game_state={self.pause.last_game_state}"),
+            (f"chase={self.villain.villain_chase}"),
+            (f"hero_x={self.hero.herox_position}"),
+            (f"hero_y={self.hero.heroy_position}"),
+            (f"hero_can_move={self.hero.hero_can_move}"),
+            (f"hero_is_running={self.hero.hero_is_running}"),
+            (f"villain_x={self.villain.villainx_position}"),
+            (f"villain_y={self.villain.villainy_position}"),
+            (f"mouse_pos={pygame.mouse.get_pos()}"),
+            (f"first_encounter={self.first_encounter}"),
+            (f"return_by_death={self.hero.return_by_death_effect}"),
+            (f"current_phrase={self.dialogue.current_phrase}"),
+            (f"dialogue_bar_appears={self.dialogue.dialogue_bar_appears}")
+        ]
+
+        for debug in debug_list:
+            y += 30
+            screen.draw.text(debug, (x, y), color=(200, 0, 0), fontsize = 30, owidth=4, ocolor="black", shadow=(1,2), scolor="#202020")
+
+    def update(self, dt):
+
+        self.video.update()
         
         self.adjust.adjusting_mode()
 
+        self.pause.alpha_update()
+
+        self.pause.update()
+
         if self.game_state == "exploration":
-            prev_hero_x = self.hero.herox_position
-            prev_hero_y = self.hero.heroy_position
 
             self.hero.make_hero_old_position_update()
 
@@ -431,15 +838,28 @@ class Game():
             self.collision_hero.inflate_ip(-60, -150)
             self.collision_hero.y += 40
 
-            #if self.collision_hero.collidelist(self.obstacle.obstacles) != -1: #ТУТ ГЕРОЙ СПОТЫКАЕТСЯ ОБ obstacles
-            #    self.hero.herox_position = prev_hero_x 
-            #    self.hero.heroy_position = prev_hero_y 
-
-        self.first_meet_villain() # ТУТ Я ВЫНЕС ПРОВЕРКУ НА СТОЛКНОВЕНИЕ, КОТОРОЕ ДОЛЖНО ЗАПУСКАТЬ ДИАЛОГ, ДАЛЬШЕ НАДО СДЕЛАТЬ ПЕРЕКЛЮЧЕНИЕ С ДИАЛОГА НА CHASE
+        self.first_meet_villain()
 
         if self.game_state == "dialogue":
-            self.music.villain_first_reply()
 
+            self.dialogue.next_phrase(dt)
+             
+            if self.dialogue_started == False:
+
+                self.hero.hero_can_move = False
+                self.music.villain_first_reply()
+                self.dialogue.dialogue_bar_appears = True
+                clock.schedule(self.dialogue.show_first_phrase, 0.7)
+                self.dialogue_started = True
+
+            if self.dialogue.current_phrase == len(PHRASES_LIST) - 1:
+                self.dialogue.time += dt
+                text, duration = PHRASES_LIST[self.dialogue.current_phrase]
+                if self.dialogue.time >= duration:
+                    self.start_chase()
+                    self.dialogue.time = 0
+        
+        
         if self.game_state == "chase":
 
             prev_hero_x = self.hero.herox_position
@@ -457,18 +877,9 @@ class Game():
             #    self.hero.herox_position = prev_hero_x 
             #    self.hero.heroy_position = prev_hero_y 
 
-            #prev_villain_x = self.villain.villainx_position
-            #prev_villain_y = self.villain.villainy_position
-
-            #self.collision_villain = self.villain.villain_icon.get_rect(topleft = (self.villain.villainx_position, self.villain.villainy_position))
-            #self.collision_hero.inflate_ip(-60, -150)
-            #self.collision_hero.y += 40
+            self.villain.make_villain_old_position_update()
 
             self.villain.villain_runs_update()
-
-            #if self.collision_villain.collidelist(self.obstacle.obstacles) != -1:
-           #     self.villain.villainx_position = prev_villain_x
-            #    self.villain.villainy_position = prev_villain_y
 
             self.hero_return_by_death()
             self.hero.enable_return_by_death_effect()
@@ -478,10 +889,14 @@ class Game():
     def draw(self):
 
         screen.clear()
+
         screen.blit(background, (0, 0))
 
         self.set_screen_mode()
 
+        #screen.blit(map_shadows, (0, 0))
+
+        self.hero.hero_shadow_draw()
         self.hero.hero_draw()
         self.hero.hero_walk_draw()
         if self.spectator_mode == True:
@@ -493,28 +908,69 @@ class Game():
                 self.collision_hero.y += 55
                 screen.draw.rect(self.collision_hero, (200, 0, 0))
 
+        self.villain.villain_shadow_draw()
+        self.villain.villain_walk_draw()
+
         self.villain.villain_stays_draw()
 
-        screen.blit(background_decorations, (0, 0))
-        screen.blit(npc_layer, (0, 0))
+        #screen.blit(background_decorations, (0, 0))
+        #screen.blit(npc_layer, (0, 0))
 
         self.adjust.adjusting_mode()
 
         self.dialogue.dialogue_bar_icon_draw()
         self.dialogue.villain_talking_draw()
 
+        if self.game_state == "Pause":
+            self.pause.pause_draw()
+
         screen.draw.text("P - включить режим отладки", (5, 5), color=(200, 0, 0))
-        screen.draw.text("Esc - Насувать васлию пенисов в рот", (5, 20), color=(200, 0, 0))
+        screen.draw.text("Esc - выйти в меню", (5, 20), color=(200, 0, 0))
+        screen.draw.text("Когда в меню, O - посмотреть эдит", (5, 35), color=(200, 0, 0))
+
+        if game.video.playing:
+            game.video.draw()
+
+        self.draw_debug_menu()
+
 game = Game()
 
-def update():
-    game.update()
+def update(dt):
+    game.update(dt)
 
 def draw():
     game.draw()
 
 def on_key_down(key):
+    if key == keys.F11:
+        if game.fullscreen_set == False:
+            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
+            game.fullscreen_set = True
+        elif game.fullscreen_set == True:
+            screen.surface = pygame.display.set_mode((WIDTH, HEIGHT))
+            game.fullscreen_set = False
+
     if key == keys.P:
         game.spectator_mode = not game.spectator_mode
+    if key == keys.ESCAPE:
+        game.pause.pause_toggle()
+        game.pause.opening_menu()
+
+    if key == keys.ESCAPE and game.video.playing:
+        game.video.stop()
+        game.pause.pause_toggle()
+        game.pause.opening_menu()
+        game.pause.alpha = 250
+
+def on_mouse_down(pos, button):
+    if game.game_state == "Pause":
+        if 132 <= pos[0] <= 826 and 845 <= pos[1] <= 977:
+            pygame.quit()
+            sys.exit()
+        if 132 <= pos[0] <= 826 and 650 <= pos[1] <= 782:
+            game.video.play("video/edit1.mp4")
+        if 132 <= pos[0] <= 826 and 353 <= pos[1] <= 485:
+            game.pause.pause_toggle()
+            game.pause.opening_menu()
 
 pgzrun.go()
